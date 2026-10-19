@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tissue Optics Explorer — NIR light in skin</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root{--bg:#0a0e16;--panel:#121826;--ink:#e8eef6;--mut:#8aa0bd;--acc:#ff8a3d;--sense:#3ec8c0;--line:#24304a;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);}
+  h1{font-size:18px;margin:0;font-weight:650;}
+  .sub{color:var(--mut);font-size:12px;margin-top:3px;}
+  .wrap{display:grid;grid-template-columns:330px 1fr;min-height:calc(100vh - 58px);}
+  .panel{background:var(--panel);border-right:1px solid var(--line);padding:16px 18px;overflow:auto;}
+  .plots{display:grid;grid-template-rows:1.22fr 1fr;gap:6px;padding:6px;min-height:0;}
+  .prow{display:grid;grid-template-columns:1fr 1fr;gap:6px;min-height:0;}
+  .ctl{margin-bottom:13px;}
+  .ctl label{display:block;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
+  .val{color:var(--acc);font-weight:650;text-transform:none;letter-spacing:0;}
+  input[type=range]{width:100%;accent-color:var(--acc);}
+  input[type=range].sense{accent-color:var(--sense);}
+  .ticks{display:flex;justify-content:space-between;font-size:10px;color:#5a6b86;margin-top:1px;}
+  .sec{border-top:1px solid var(--line);margin:14px 0 11px;padding-top:11px;font-size:11px;color:var(--sense);text-transform:uppercase;letter-spacing:.06em;font-weight:650;}
+  .seclite{color:var(--mut);}
+  .readout{font-size:12px;color:var(--mut);border-top:1px solid var(--line);padding-top:11px;margin-top:6px;}
+  .readout b{color:var(--ink);}
+  .dep{margin-top:7px;}
+  .deprow{display:flex;align-items:center;gap:6px;font-size:11px;margin:2px 0;}
+  .bar{height:9px;border-radius:2px;flex:0 0 auto;}
+  .sw{width:11px;height:11px;border-radius:2px;display:inline-block;border:1px solid #0006;flex:0 0 auto;}
+  .tag{display:inline-block;background:#3a2a10;color:#ffce8a;font-size:10px;padding:2px 7px;border-radius:10px;margin-top:12px;letter-spacing:.03em;}
+  .seg{display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:4px;}
+  .seg button{flex:1;background:transparent;color:var(--mut);border:0;padding:7px 6px;font-size:12px;cursor:pointer;font-weight:600;}
+  .seg button.on{background:var(--sense);color:#04141a;}
+  .seg.site button.on{background:var(--acc);color:#1a0d02;}
+  #plot3d,#plot2d,#plotdet{width:100%;height:100%;min-height:240px;}
+  @media (max-width:820px){.wrap{grid-template-columns:1fr;}.panel{border-right:0;border-bottom:1px solid var(--line);}.plots{grid-template-rows:auto;}.prow{grid-template-columns:1fr;}#plot3d{min-height:380px;}#plot2d,#plotdet{min-height:300px;}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tissue Optics Explorer <span style="color:var(--mut);font-weight:400">— near-infrared light in skin &amp; source–detector reflectance</span></h1>
+  <div class="sub">Monte-Carlo light transport in a layered <b id="siteword">finger</b>. <b>Fluence</b>: where source light goes. <b>Sensitivity</b>: the region a source–detector pair measures. <b>Illustrative</b> — literature-order optics and simplified transport for intuition, not validated dosimetry.</div>
+</header>
+<div class="wrap">
+  <div class="panel">
+    <div class="ctl"><label>Body site</label>
+      <div class="seg site" id="siteseg"></div></div>
+    <div class="ctl"><label>Wavelength: <span class="val" id="v_wl"></span></label>
+      <input type="range" id="s_wl"/><div class="ticks" id="t_wl"></div></div>
+    <div class="ctl"><label>Skin tone (melanin fraction): <span class="val" id="v_mel"></span></label>
+      <input type="range" id="s_mel"/><div class="ticks" id="t_mel"></div></div>
+    <div class="ctl"><label>Tissue scattering: <span class="val" id="v_mus"></span></label>
+      <input type="range" id="s_mus"/><div class="ticks" id="t_mus"></div></div>
+    <div class="ctl"><label>Dermis thickness: <span class="val" id="v_der"></span></label>
+      <input type="range" id="s_der"/><div class="ticks" id="t_der"></div></div>
+
+    <div class="sec">Blood (drives the readout) <span class="seclite">·</span></div>
+    <div class="ctl"><label>Oxygen saturation SO₂: <span class="val" id="v_so2"></span></label>
+      <input type="range" class="sense" id="s_so2"/><div class="ticks" id="t_so2"></div></div>
+    <div class="ctl"><label>Blood volume: <span class="val" id="v_bf"></span></label>
+      <input type="range" class="sense" id="s_bf"/><div class="ticks" id="t_bf"></div></div>
+
+    <div class="sec">Source–detector (reflectance)</div>
+    <div class="seg" id="modeseg">
+      <button id="m_flu" class="on">Fluence</button><button id="m_ban">Sensitivity banana</button></div>
+    <div class="ctl" style="margin-top:9px"><label>Source–detector distance (SDS): <span class="val" id="v_sds"></span></label>
+      <input type="range" class="sense" id="s_sds"/><div class="ticks" id="t_sds"></div></div>
+
+    <div class="sec seclite">Cross-section</div>
+    <div class="ctl"><label>Slice position: <span class="val" id="v_sl"></span></label>
+      <input type="range" id="s_slice"/></div>
+
+    <div class="readout" id="readout"></div>
+    <div class="dep" id="dep"></div>
+    <div class="tag" id="tag" title="Optics: Roblyer et al. 2025 stitched chromophore spectra (430–2000 nm); water extended to 2500 nm with Segelstein 1981 (seamless join). Lipid and haemoglobin held flat beyond 2000 nm (no source in the bundled tables; both are minor vs water in the SWIR). Composition and scattering after Jacques 2013. Illustrative, not validated dosimetry.">Illustrative · literature optics 500–2500 nm · CPU Monte Carlo</div>
+  </div>
+  <div class="plots">
+    <div id="plot3d"></div>
+    <div class="prow"><div id="plot2d"></div><div id="plotdet"></div></div>
+  </div>
+</div>
+<script>
+const SITES = /*__SITES__*/;
+const FIRE=[[0,'rgb(8,1,7)'],[0.18,'rgb(70,8,12)'],[0.4,'rgb(170,35,15)'],[0.62,'rgb(232,96,20)'],[0.82,'rgb(252,178,55)'],[1,'rgb(255,251,235)']];
+const SENSE=[[0,'rgb(2,10,20)'],[0.25,'rgb(6,52,72)'],[0.5,'rgb(10,116,124)'],[0.72,'rgb(40,184,172)'],[0.9,'rgb(140,232,214)'],[1,'rgb(232,255,250)']];
+let MODE='flu', SITE=SITES.order[0];
+
+// ---- per-site state (reassigned in loadSite) ----
+let DATA,DET,AX,GS,G,RAD, NX,NY,NZ,DX,NV, RF,CX,CZ,RBONE,BONECORE,YLEN,YSRC, loL,hiL;
+let meanF,basisF,coeff,K,SC, detLogR,DW,DB,DM,DO,DF;
+let CAM={eye:{x:1.6,y:-1.6,z:1.05}};
+
+// ---- decode helpers ----
+function b64bytes(s){const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
+function f16(h){const s=(h&0x8000)?-1:1,e=(h&0x7C00)>>10,f=h&0x03FF;
+  if(e===0)return s*Math.pow(2,-14)*(f/1024);if(e===31)return f?NaN:s*Infinity;return s*Math.pow(2,e-15)*(1+f/1024);}
+
+// ---- sliders ----
+const ids=['s_wl','s_mel','s_mus','s_der','s_so2','s_bf','s_sds','s_slice'];
+function el(id){return document.getElementById(id);}
+function configSlider(id,vals,frac){const s=el(id);const n=vals.length;s.min=0;s.max=Math.max(0,n-1);
+  s.step=n>1?Math.max(0.005,(n-1)/300):1;if(frac!==undefined)s.value=Math.min(s.max,Math.max(0,frac));s.disabled=n<=1;return s;}
+function ends(id,vals){el(id).innerHTML=`<span>${vals[0]}</span><span>${vals[vals.length-1]}</span>`;}
+function lerp(arr,f){const i0=Math.floor(f),i1=Math.min(arr.length-1,i0+1),t=f-i0;return arr[i0]*(1-t)+arr[i1]*t;}
+function fidx(arr,val){if(val<=arr[0])return 0;const n=arr.length;if(val>=arr[n-1])return n-1;let i=0;while(i<n-1&&arr[i+1]<val)i++;return i+(val-arr[i])/(arr[i+1]-arr[i]);}
+function pairs(f,n){const i0=Math.max(0,Math.min(n-1,Math.floor(f))),i1=Math.min(n-1,i0+1),t=Math.min(1,Math.max(0,f-i0));return [[i0,1-t],[i1,t]];}
+function curWL(){return lerp(AX.wavelength,+el('s_wl').value);}
+function curSDS(){return lerp(DET.sds,+el('s_sds').value);}
+function curDermis(){return lerp(AX.dermis_um,+el('s_der').value);}
+function fracs(){return [+el('s_wl').value,+el('s_mel').value,+el('s_mus').value,+el('s_der').value];}
+
+function getPhys(){return {wl:curWL(),mel:lerp(AX.melanin,+el('s_mel').value),mus:lerp(AX.mus_scale,+el('s_mus').value),
+  der:curDermis(),so2:lerp(DET.so2,+el('s_so2').value),bf:lerp(DET.bf,+el('s_bf').value),sds:curSDS(),
+  slicefrac:(+el('s_slice').value)/(NY-1||1)};}
+
+// ---- load a site: decode + geometry + reconfigure sliders ----
+function loadSite(name,phys){
+  SITE=name; const S=SITES.sites[name]; DATA=S.DATA; DET=S.DET;
+  AX=DATA.axes; GS=DATA.grid_shape; G=DATA.geom; RAD=DATA.radiance;
+  [NX,NY,NZ]=DATA.dims; DX=DATA.dx; NV=NX*NY*NZ;
+  RF=G.RF; CX=G.CX; CZ=G.CZ; RBONE=G.r_bone; BONECORE=G.bone_core; YLEN=NY*DX; YSRC=G.source_y;
+  loL=Math.log10(RAD.noise); hiL=Math.log10(RAD.E0);
+  // decode SVD field
+  const u=b64bytes(DATA.basis.mean);meanF=new Float32Array(NV);for(let i=0;i<NV;i++)meanF[i]=u[i]/255;
+  K=DATA.basis.K;SC=DATA.basis.scales;
+  const c=new Int8Array(b64bytes(DATA.basis.comp).buffer);basisF=new Float32Array(K*NV);
+  for(let k=0;k<K;k++){const s=SC[k]/127;const o=k*NV;for(let v=0;v<NV;v++)basisF[o+v]=c[o+v]*s;}
+  coeff=new Float32Array(b64bytes(DATA.coeff).buffer);
+  // decode detector tensor
+  [DW,DB,DM,DO,DF]=DET.shape;
+  const ut=new Uint16Array(b64bytes(DET.logR).buffer);detLogR=new Float32Array(ut.length);for(let i=0;i<ut.length;i++)detLogR[i]=f16(ut[i]);
+  // sliders
+  configSlider('s_wl',AX.wavelength,phys?fidx(AX.wavelength,phys.wl):(AX.wavelength.length>4?4:0));
+  configSlider('s_mel',AX.melanin,phys?fidx(AX.melanin,phys.mel):0);
+  configSlider('s_mus',AX.mus_scale,phys?fidx(AX.mus_scale,phys.mus):(AX.mus_scale.length-1)/2);
+  configSlider('s_der',AX.dermis_um,phys?fidx(AX.dermis_um,phys.der):(AX.dermis_um.length-1)/2);
+  configSlider('s_so2',DET.so2,phys?fidx(DET.so2,phys.so2):Math.max(0,DET.so2.indexOf(0.9)));
+  configSlider('s_bf',DET.bf,phys?fidx(DET.bf,phys.bf):Math.max(0,DET.bf.indexOf(1.0)));
+  const sdsLo=Math.max(0,DET.sds.findIndex(v=>v>=0.9));const sSds=el('s_sds');
+  sSds.min=sdsLo;sSds.max=DET.sds.length-1;sSds.step=Math.max(0.01,(DET.sds.length-1-sdsLo)/300);
+  sSds.value=phys?Math.max(sdsLo,fidx(DET.sds,phys.sds)):sdsLo+(DET.sds.length-1-sdsLo)*0.28;
+  const sSl=el('s_slice');sSl.min=0;sSl.max=NY-1;sSl.step=1;sSl.value=phys?Math.round(phys.slicefrac*(NY-1)):Math.floor(NY/2);
+  ends('t_wl',AX.wavelength.map(Math.round));ends('t_mel',AX.melanin);ends('t_mus',AX.mus_scale.map(v=>v+'×'));
+  ends('t_der',AX.dermis_um.map(v=>Math.round(v)+'µm'));ends('t_so2',DET.so2.map(v=>Math.round(v*100)+'%'));
+  ends('t_bf',DET.bf.map(v=>v+'×'));ends('t_sds',[DET.sds[sdsLo]+'mm',DET.sds[DET.sds.length-1]+'mm']);
+  document.getElementById('siteword').textContent=(G.site_label||name).toLowerCase();
+}
+
+// ---- interpolation over the fluence grid ----
+function corners(f){const d=f.map((ff,a)=>{const n=GS[a];const i0=Math.max(0,Math.min(n-1,Math.floor(ff)));const i1=Math.min(n-1,i0+1);const t=Math.min(1,Math.max(0,ff-i0));return [[i0,1-t],[i1,t]];});
+  const out=[];for(const[a,wa]of d[0])for(const[b,wb]of d[1])for(const[cc,wc]of d[2])for(const[e,we]of d[3]){const w=wa*wb*wc*we;if(w<=1e-9)continue;out.push([((a*GS[1]+b)*GS[2]+cc)*GS[3]+e,w]);}return out;}
+function interpCoeff(cs){const cf=new Float32Array(K);for(const[idx,w]of cs){const o=idx*K;for(let k=0;k<K;k++)cf[k]+=w*coeff[o+k];}return cf;}
+function interpArr(cs,arr){let s=0;for(const[idx,w]of cs)s+=w*arr[idx];return s;}
+function interpPct(cs){const HC=G.hover_classes,p={};HC.forEach(c=>p[c]=0);for(const[idx,w]of cs){const row=DATA.meta.pct[idx];HC.forEach((c,i)=>p[c]+=w*row[i]);}return p;}
+function reconstruct(cf){const lg=new Float32Array(NV);lg.set(meanF);
+  for(let k=0;k<K;k++){const ck=cf[k];if(Math.abs(ck)<1e-7)continue;const o=k*NV;for(let v=0;v<NV;v++)lg[v]+=ck*basisF[o+v];}
+  for(let v=0;v<NV;v++)lg[v]=lg[v]<0?0:lg[v]>1?1:lg[v];return lg;}
+
+// ---- fluence-rate display scale ----
+function phiAt(lg){return Math.pow(10,lg*(hiL-loL)+loL);}
+function sci(x){if(!(x>0))return '0';const e=Math.floor(Math.log10(x));const m=x/Math.pow(10,e);return (Math.abs(m-1)<0.05?'':m.toFixed(1)+'×')+'10'+supr(e);}
+function supr(n){const s={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};return String(n).split('').map(c=>s[c]||c).join('');}
+
+// ---- sensitivity (banana) field: phi_S * phi_D rotated to detector ----
+const SENSE_DEC=3.2;
+function bilinXZ(phi,fx,iy,fz){const x0=Math.floor(fx),z0=Math.floor(fz);if(x0<0||z0<0||x0>=NX-1||z0>=NZ-1)return 0;
+  const tx=fx-x0,tz=fz-z0,b=(ix,iz)=>phi[(ix*NY+iy)*NZ+iz];
+  return b(x0,z0)*(1-tx)*(1-tz)+b(x0+1,z0)*tx*(1-tz)+b(x0,z0+1)*(1-tx)*tz+b(x0+1,z0+1)*tx*tz;}
+function sensField(lg){
+  const phiS=new Float32Array(NV);for(let v=0;v<NV;v++)phiS[v]=phiAt(lg[v]);
+  const th=curSDS()/RF,c=Math.cos(th),s=Math.sin(th);const bn=new Float32Array(NV);let bmax=0;
+  for(let ix=0;ix<NX;ix++){const xx=(ix+0.5)*DX-CX;for(let iz=0;iz<NZ;iz++){const zz=(iz+0.5)*DX-CZ;
+    const xr=c*xx-s*zz,zr=s*xx+c*zz;const fx=(xr+CX)/DX-0.5,fz=(zr+CZ)/DX-0.5;
+    for(let iy=0;iy<NY;iy++){const v=(ix*NY+iy)*NZ+iz;const b=phiS[v]*bilinXZ(phiS,fx,iy,fz);bn[v]=b;if(b>bmax)bmax=b;}}}
+  const lmax=Math.log10(bmax+1e-30),out=new Float32Array(NV);
+  for(let v=0;v<NV;v++){const b=bn[v];out[v]=b>0?Math.max(0,Math.min(1,(Math.log10(b)-lmax+SENSE_DEC)/SENSE_DEC)):0;}
+  return out;}
+function detectorXZ(){const th=curSDS()/RF;return [CX+RF*Math.sin(th),CZ+RF*Math.cos(th)];}
+
+// ---- layer geometry (generic; finger tube + wrist slab) ----
+function rgb(c){return `rgb(${c.map(v=>Math.round(v*255)).join(',')})`;}
+function layerBounds(){const der=curDermis();let r=RF;const out=[];
+  for(const [nm,um] of G.layers){let inner;
+    if(um===null||um===undefined){inner=BONECORE?RBONE:0;out.push({name:nm,ro:r,ri:inner});r=inner;}
+    else{const t=(nm==='dermis'?der:um)/1000;inner=r-t;out.push({name:nm,ro:r,ri:inner});r=inner;}}
+  if(BONECORE&&RBONE>0)out.push({name:'bone',ro:RBONE,ri:0});
+  return out;}
+
+// ---- 3D ----
+function ax3(t){return {title:{text:t,font:{size:9,color:'#8aa0bd'}},color:'#3a485f',gridcolor:'#18233a',showbackground:false,zeroline:false};}
+function layerArc(radius,color,opacity){const x=[],y=[],z=[],I=[],J=[],Kk=[];const N=110,pad=0.1;let prev=-1;
+  for(let i=0;i<=N;i++){const th=(i/N)*2*Math.PI,xx=CX+radius*Math.sin(th),zz=CZ+radius*Math.cos(th);
+    const inside=xx>=-pad&&xx<=NX*DX+pad&&zz>=-pad&&zz<=NZ*DX+pad;
+    if(inside){const idx=x.length;x.push(xx,xx);z.push(zz,zz);y.push(0,YLEN);
+      if(prev>=0){I.push(prev,prev);J.push(prev+1,idx+1);Kk.push(idx+1,idx);}prev=idx;}else prev=-1;}
+  return {type:'mesh3d',x,y,z,i:I,j:J,k:Kk,color,opacity,flatshading:true,lighting:{ambient:0.72,diffuse:0.3},hoverinfo:'skip',showscale:false};}
+function slicePlane(yy){const X=NX*DX,Z=NZ*DX;return {type:'mesh3d',x:[0,X,X,0],y:[yy,yy,yy,yy],z:[0,0,Z,Z],
+  i:[0,0],j:[1,2],k:[2,3],color:'rgb(120,170,255)',opacity:0.12,hoverinfo:'skip',showscale:false};}
+// Smooth glow as a dense, soft, value-scaled scatter. Robust across browsers
+// (incl. Safari, where Plotly `volume` silently fails to render); marker size
+// grows with value^2 for a bright bloom-core fading to a soft edge.
+function glowScatter(field,scale){const x=[],y=[],z=[],c=[],sz=[];const thr=0.085,R2=RF-0.05;
+  for(let ix=0;ix<NX;ix++){const xx=(ix+0.5)*DX;for(let iz=0;iz<NZ;iz++){const zz=(iz+0.5)*DX;
+    if(Math.hypot(xx-CX,zz-CZ)>R2)continue;
+    for(let iy=0;iy<NY;iy++){const v=field[(ix*NY+iy)*NZ+iz];if(v<thr)continue;
+      x.push(xx);y.push((iy+0.5)*DX);z.push(zz);c.push(v);sz.push(2.4+6.0*v*v);}}}
+  return {type:'scatter3d',mode:'markers',x,y,z,
+    marker:{size:sz,color:c,colorscale:scale,cmin:0,cmax:1,opacity:0.17,showscale:false,line:{width:0}},hoverinfo:'skip'};}
+function srcDetMarkers(){const [dx,dz]=detectorXZ();return {type:'scatter3d',mode:'markers+text',x:[CX,dx],y:[YSRC,YSRC],z:[CZ+RF,dz],
+  text:['source','detector'],textposition:'top center',textfont:{color:'#dfeaf6',size:11},
+  marker:{size:[7,7],color:['#ffd27f','#5fe6dc'],symbol:['diamond','square'],line:{color:'#0a0e16',width:1}},hoverinfo:'skip'};}
+function draw3d(lg,sf){const layers=layerBounds();
+  const shells=layers.map(L=>layerArc(L.ro,rgb(G.colors[L.name]),L.name==='bone'?0.4:0.115));
+  const traces=[...shells,slicePlane((+el('s_slice').value+0.5)*DX)];
+  if(MODE==='ban'){traces.push(glowScatter(sf,SENSE));traces.push(srcDetMarkers());}
+  else traces.push(glowScatter(lg,FIRE));
+  Plotly.react('plot3d',traces,{paper_bgcolor:'#0a0e16',margin:{l:0,r:0,t:0,b:0},showlegend:false,
+    scene:{aspectmode:'data',bgcolor:'#0a0e16',camera:CAM,xaxis:ax3('x (mm)'),yaxis:ax3('along '+(SITE==='finger'?'finger':'arm')+' (mm)'),zaxis:ax3('depth axis (mm)')}},
+    {displayModeBar:false,responsive:true});}
+
+// ---- 2D cross-section ----
+function circle(cx,cz,r,color,w){return {type:'circle',xref:'x',yref:'y',x0:cx-r,x1:cx+r,y0:cz-r,y1:cz+r,line:{color,width:w},opacity:0.55};}
+function dot(cx,cz,r,fill){return {type:'circle',xref:'x',yref:'y',x0:cx-r,x1:cx+r,y0:cz-r,y1:cz+r,fillcolor:fill,line:{width:0}};}
+function layerAt(x,z,bounds){const r=Math.hypot(x-CX,z-CZ);if(r>RF)return null;for(const L of bounds){if(r<=L.ro+1e-9&&r>L.ri-1e-9)return L.name;}return null;}
+function draw2d(lg,pct,sf){const iy=+el('s_slice').value;const bounds=layerBounds();const banana=MODE==='ban';
+  const xs=[],ys=[];for(let i=0;i<NX;i++)xs.push((i+0.5)*DX);for(let i=0;i<NZ;i++)ys.push((i+0.5)*DX);
+  const zz=[],cd=[];for(let iz=0;iz<NZ;iz++){const zr=[],cr=[];const zw=(iz+0.5)*DX;
+    for(let ix=0;ix<NX;ix++){const v=(ix*NY+iy)*NZ+iz;zr.push(banana?sf[v]:lg[v]);const L=layerAt((ix+0.5)*DX,zw,bounds);cr.push(L?[L,pct[L]!==undefined?pct[L].toFixed(1):'—']:['outside','']);}zz.push(zr);cd.push(cr);}
+  const rad=Math.max(0.42,RF*0.05);
+  const shapes=[circle(CX,CZ,RF,'rgba(225,180,140,0.85)',2)];
+  for(const L of bounds){if(L.name==='muscle')continue;shapes.push(circle(CX,CZ,L.ro,L.name==='bone'?'rgba(235,228,205,0.85)':'rgba(255,255,255,0.26)',L.name==='bone'?1.5:1));}
+  shapes.push(dot(CX,CZ+RF,rad,'rgba(255,210,127,0.98)'));
+  if(banana){const[dx,dz]=detectorXZ();shapes.push(dot(dx,dz,rad,'rgba(95,230,220,0.98)'));}
+  const tv=[0,0.25,0.5,0.75,1];
+  const tr=banana
+    ? {type:'heatmap',z:zz,x:xs,y:ys,colorscale:SENSE,zmin:0,zmax:1,zsmooth:'best',hoverinfo:'skip',
+       colorbar:{title:{text:'sensitivity (rel.)',side:'right',font:{size:10,color:'#8aa0bd'}},tickvals:[0,1],ticktext:['low','high'],tickfont:{color:'#8aa0bd',size:9},len:0.92,thickness:13}}
+    : {type:'heatmap',z:zz,x:xs,y:ys,customdata:cd,colorscale:FIRE,zmin:0,zmax:1,zsmooth:'best',
+       hovertemplate:'<b>%{customdata[0]}</b><br>%{customdata[1]}% of absorbed light deposited here<extra></extra>',
+       colorbar:{title:{text:'fluence rate (W/mm², illustrative scale)',side:'right',font:{size:10,color:'#8aa0bd'}},tickvals:tv,ticktext:tv.map(t=>sci(phiAt(t))),tickfont:{color:'#8aa0bd',size:9},len:0.92,thickness:13}};
+  const ttl=banana?`Measurement sensitivity (banana) @ ${(iy*DX).toFixed(1)} mm`:`Cross-section @ ${(iy*DX).toFixed(1)} mm — hover for layer & deposition`;
+  Plotly.react('plot2d',[tr],{paper_bgcolor:'#0a0e16',plot_bgcolor:'#0a0e16',margin:{l:46,r:8,t:26,b:34},
+    title:{text:ttl,font:{size:11.5,color:'#e8eef6'}},
+    xaxis:{title:{text:'x (mm)',font:{size:10,color:'#8aa0bd'}},color:'#3a485f',scaleanchor:'y',constrain:'domain',range:[0,NX*DX],autorange:false},
+    yaxis:{title:{text:'z, depth axis (mm)',font:{size:10,color:'#8aa0bd'}},color:'#3a485f',range:[0,NZ*DX],autorange:false},shapes},
+    {displayModeBar:false,responsive:true});}
+
+// ---- detector readout: 3 stacked subplots ----
+function curveSDS(fw,fm,fo,fb){const W=pairs(fw,DW),M=pairs(fm,DM),O2=pairs(fo,DO),B=pairs(fb,DF);const out=new Float32Array(DB);
+  for(let ib=0;ib<DB;ib++){let s=0;for(const[iw,ww]of W)for(const[im,wm]of M)for(const[io,wo]of O2)for(const[iff,wf]of B)s+=ww*wm*wo*wf*detLogR[(((iw*DB+ib)*DM+im)*DO+io)*DF+iff];out[ib]=s;}return out;}
+function curveWL(fs,fm,fo,fb){const S=pairs(fs,DB),M=pairs(fm,DM),O2=pairs(fo,DO),B=pairs(fb,DF);const out=new Float32Array(DW);
+  for(let iw=0;iw<DW;iw++){let s=0;for(const[ib,ws]of S)for(const[im,wm]of M)for(const[io,wo]of O2)for(const[iff,wf]of B)s+=ws*wm*wo*wf*detLogR[(((iw*DB+ib)*DM+im)*DO+io)*DF+iff];out[iw]=s;}return out;}
+function interpSDSval(fw,fs,fm,fo,fb){const W=pairs(fw,DW),S=pairs(fs,DB),M=pairs(fm,DM),O2=pairs(fo,DO),B=pairs(fb,DF);let s=0;
+  for(const[iw,ww]of W)for(const[ib,ws]of S)for(const[im,wm]of M)for(const[io,wo]of O2)for(const[iff,wf]of B)s+=ww*ws*wm*wo*wf*detLogR[(((iw*DB+ib)*DM+im)*DO+io)*DF+iff];return s;}
+function drawDet(){
+  const fw=fidx(DET.wavelengths,curWL()),fm=+el('s_mel').value,fo=+el('s_so2').value,fb=+el('s_bf').value,fs=+el('s_sds').value;
+  const fo0=DET.so2.length-1,fb0=Math.max(0,DET.bf.indexOf(1.0)),Ad=DET.Adet,floor=DET.floor,cw=curWL(),cs=curSDS();
+  const ySDS=Array.from(curveSDS(fw,fm,fo,fb)).map(v=>Math.pow(10,v)*Ad);
+  const logWL=curveWL(fs,fm,fo,fb),logRef=curveWL(fs,fm,fo0,fb0);
+  const yWL=Array.from(logWL).map(v=>Math.pow(10,v)*Ad);
+  const mod=Array.from(logWL).map((v,i)=>(Math.pow(10,v-logRef[i])-1)*100);
+  const opPt=Math.pow(10,interpSDSval(fw,fs,fm,fo,fb))*Ad;
+  const lo=floor/30,sdsMax=Math.max(...ySDS,floor*4),wlMax=Math.max(...yWL,floor*4),mAbs=Math.max(2.5,...mod.map(Math.abs))*1.15;
+  const tSDS={x:DET.sds,y:ySDS,mode:'lines',line:{color:'#5fe6dc',width:2},hovertemplate:'SDS %{x} mm<br>%{y:.2e}<extra></extra>',xaxis:'x',yaxis:'y',showlegend:false};
+  const tOp={x:[cs],y:[opPt],mode:'markers',marker:{size:9,color:opPt>=floor?'#ffd27f':'#7a8aa0',line:{color:'#0a0e16',width:1}},hoverinfo:'skip',xaxis:'x',yaxis:'y',showlegend:false};
+  const tWL={x:DET.wavelengths,y:yWL,mode:'lines',line:{color:'#ff8a3d',width:2},hovertemplate:'%{x} nm<br>%{y:.2e}<extra></extra>',xaxis:'x2',yaxis:'y2',showlegend:false};
+  const tMod={x:DET.wavelengths,y:mod,mode:'lines',line:{color:'#9d8cff',width:2},hovertemplate:'%{x} nm<br>ΔR/R %{y:.1f}%<extra></extra>',xaxis:'x3',yaxis:'y3',showlegend:false};
+  const shapes=[
+    {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:floor,y1:floor,line:{color:'#ff5d6c',width:1,dash:'dot'}},
+    {type:'line',xref:'paper',x0:0,x1:1,yref:'y2',y0:floor,y1:floor,line:{color:'#ff5d6c',width:1,dash:'dot'}},
+    {type:'line',xref:'paper',x0:0,x1:1,yref:'y3',y0:0,y1:0,line:{color:'#5a6b86',width:1}},
+    {type:'line',xref:'x',x0:cs,x1:cs,yref:'y',y0:lo,y1:sdsMax,line:{color:'#5fe6dc',width:1,dash:'dash'}},
+    {type:'line',xref:'x2',x0:cw,x1:cw,yref:'y2',y0:lo,y1:wlMax,line:{color:'#ffd27f',width:1,dash:'dash'}},
+    {type:'line',xref:'x3',x0:cw,x1:cw,yref:'y3',y0:-mAbs,y1:mAbs,line:{color:'#ffd27f',width:1,dash:'dash'}}];
+  const ann=[
+    {xref:'paper',yref:'y',x:0.02,y:Math.log10(floor),text:'detection floor',showarrow:false,font:{color:'#ff8a98',size:9},xanchor:'left',yanchor:'bottom'},
+    {xref:'paper',yref:'paper',x:0,y:1.005,text:`Detected signal vs SDS @ ${Math.round(cw)} nm`,showarrow:false,font:{color:'#e8eef6',size:11},xanchor:'left',yanchor:'bottom'},
+    {xref:'paper',yref:'paper',x:0,y:0.645,text:`Detected signal vs wavelength @ SDS ${cs.toFixed(1)} mm`,showarrow:false,font:{color:'#e8eef6',size:11},xanchor:'left',yanchor:'bottom'},
+    {xref:'paper',yref:'paper',x:0,y:0.275,text:`Blood contrast ΔR/R vs wavelength (vs SO₂ 98%, 1× blood)`,showarrow:false,font:{color:'#c3b8ff',size:11},xanchor:'left',yanchor:'bottom'}];
+  Plotly.react('plotdet',[tSDS,tOp,tWL,tMod],{paper_bgcolor:'#0a0e16',plot_bgcolor:'#0a0e16',margin:{l:54,r:10,t:16,b:32},
+    xaxis:{domain:[0,1],anchor:'y',color:'#3a485f',ticksuffix:' mm',tickfont:{size:8}},
+    yaxis:{domain:[0.72,1],type:'log',title:{text:'coll. frac.',font:{size:9,color:'#8aa0bd'}},color:'#3a485f',gridcolor:'#172338',range:[Math.log10(lo),Math.log10(sdsMax)]},
+    xaxis2:{domain:[0,1],anchor:'y2',showticklabels:false,color:'#3a485f'},
+    yaxis2:{domain:[0.40,0.62],type:'log',title:{text:'coll. frac.',font:{size:9,color:'#8aa0bd'}},color:'#3a485f',gridcolor:'#172338',range:[Math.log10(lo),Math.log10(wlMax)]},
+    xaxis3:{domain:[0,1],anchor:'y3',title:{text:'wavelength (nm)',font:{size:9,color:'#8aa0bd'}},color:'#3a485f'},
+    yaxis3:{domain:[0,0.24],title:{text:'ΔR/R (%)',font:{size:9,color:'#8aa0bd'}},color:'#3a485f',gridcolor:'#172338',range:[-mAbs,mAbs]},
+    shapes,annotations:ann},{displayModeBar:false,responsive:true});}
+
+// ---- readout + deposition ----
+function readout(cs){const epi=interpArr(cs,DATA.meta.epi_mua),dma=interpArr(cs,DATA.meta.derm_mua),dmu=interpArr(cs,DATA.meta.derm_musp),mph=interpArr(cs,DATA.meta.maxphi);
+  el('v_wl').textContent=Math.round(curWL())+' nm';el('v_mel').textContent=lerp(AX.melanin,+el('s_mel').value).toFixed(3);
+  el('v_mus').textContent=lerp(AX.mus_scale,+el('s_mus').value).toFixed(2)+'×';el('v_der').textContent=Math.round(curDermis())+' µm';
+  el('v_so2').textContent=Math.round(lerp(DET.so2,+el('s_so2').value)*100)+'%';el('v_bf').textContent=lerp(DET.bf,+el('s_bf').value).toFixed(2)+'×';
+  el('v_sds').textContent=curSDS().toFixed(1)+' mm';el('v_sl').textContent=(+el('s_slice').value*DX).toFixed(1)+' mm';
+  el('readout').innerHTML=`<b>Optical properties (mm⁻¹)</b><br>epidermis µa = <b>${epi.toFixed(3)}</b> · dermis µa = <b>${dma.toFixed(3)}</b>, µs' = <b>${dmu.toFixed(2)}</b><br>`+
+    `<b>Fluence scale</b> — source ${sci(RAD.E0)}, floor ${sci(RAD.noise)} W/mm² · peak ≈ <b>${sci(mph)}</b> W/mm²`;}
+function deposition(pct){const HC=G.hover_classes;const tot=HC.reduce((a,c)=>a+(pct[c]||0),0)||1;
+  el('dep').innerHTML='<b style="color:#e8eef6;font-size:11px">Where the light is absorbed</b>'+
+    HC.map(c=>{const v=pct[c]||0;return `<div class="deprow"><span class="sw" style="background:${rgb(G.colors[c])}"></span>${c}<span style="margin-left:auto;color:#e8eef6">${v.toFixed(0)}%</span><span class="bar" style="background:${rgb(G.colors[c])};width:${Math.max(1,v/tot*120)}px"></span></div>`;}).join('');}
+
+// ---- update loop ----
+let pend=false;
+function update(full){if(pend)return;pend=true;requestAnimationFrame(()=>{pend=false;
+  const cs=corners(fracs());const lg=reconstruct(interpCoeff(cs));const pct=interpPct(cs);const sf=MODE==='ban'?sensField(lg):null;
+  readout(cs);deposition(pct);if(full!==false)draw3d(lg,sf);draw2d(lg,pct,sf);drawDet();});}
+function setMode(m){MODE=m;el('m_flu').classList.toggle('on',m==='flu');el('m_ban').classList.toggle('on',m==='ban');update(true);}
+function switchSite(name){if(name===SITE)return;const phys=getPhys();loadSite(name,phys);
+  document.querySelectorAll('#siteseg button').forEach(b=>b.classList.toggle('on',b.dataset.s===name));
+  CAM={eye:{x:1.6,y:-1.6,z:1.05}};update(true);}
+
+// ---- init ----
+(function init(){
+  const seg=el('siteseg');SITES.order.forEach(s=>{const b=document.createElement('button');b.textContent=SITES.sites[s].DATA.geom.site_label||s;b.dataset.s=s;b.className=s===SITES.order[0]?'on':'';b.onclick=()=>switchSite(s);seg.appendChild(b);});
+  loadSite(SITES.order[0]);
+  ids.forEach(id=>el(id).addEventListener('input',()=>update(true)));
+  el('m_flu').addEventListener('click',()=>setMode('flu'));el('m_ban').addEventListener('click',()=>setMode('ban'));
+  window.addEventListener('resize',()=>{['plot3d','plot2d','plotdet'].forEach(p=>Plotly.Plots.resize(p));});
+  // first render synchronously so plot3d is plotly-fied before attaching the camera handler
+  const cs=corners(fracs());const lg=reconstruct(interpCoeff(cs));const pct=interpPct(cs);
+  readout(cs);deposition(pct);draw3d(lg,null);draw2d(lg,pct,null);drawDet();
+  el('plot3d').on('plotly_relayout',e=>{if(e['scene.camera'])CAM=e['scene.camera'];});
+})();
+</script>
+</body>
+</html>
